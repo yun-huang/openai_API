@@ -1,0 +1,103 @@
+# Import necessary libraries
+import os
+import pandas as pd
+import requests
+import json
+import time
+from openai import OpenAI
+
+# Initialize OpenAI client
+client = OpenAI(
+    api_key='XXXXXXX'
+)
+
+# Generate chat completion
+chat_completion = client.chat.completions.create(
+    messages=[
+        {
+            "role": "user",
+            "content": "tell me about the latest fashion trends in europe",
+        }
+    ],
+    model="gpt-3.5-turbo",
+)
+
+print(chat_completion)
+
+# Load and convert data to JSON
+data_path = '/Users/yunhuang/Desktop/OpenAI/airline_train - airline_train.csv'
+
+try:
+    data = pd.read_csv(data_path)
+    print("Data loaded successfully!")
+    
+    json_data = data.to_json(orient='records')
+    print("Data converted to JSON!")
+except Exception as e:
+    print("An error occurred:", e)
+
+# Read JSON data back into DataFrame
+train_data = pd.read_json(json_data)
+print(train_data)
+
+# Extract tweets from the DataFrame
+tweets = train_data.iloc[:, 0].tolist()
+print(tweets)
+
+# Function to extract fruit names using OpenAI's API
+def extract_fruit_names(text):
+    url = 'https://api.openai.com/v1/engines/gpt-3.5-turbo-instruct-0914/completions'
+    headers = {
+        'Authorization': 'XXXXXXXXXXXXXXXXXXX',
+        'Content-Type': 'application/json'
+    }
+    data = {
+        "prompt": f"Extract fruit names from the following text: {text}, format all words with capitalized first letter, use the most standard names of the fruits possible. Wrap final output in single quotation mark",
+        "max_tokens": 60,
+        "temperature": 0
+    }
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+    response_data = response.json()
+    if 'choices' in response_data and len(response_data['choices']) > 0:
+        text_response = response_data['choices'][0]['text'].strip()
+        return text_response
+    else:
+        return "No fruit names found"
+
+# Extract fruit names for each tweet
+results = []
+for i, text in enumerate(tweets):
+    response_text = extract_fruit_names(text)
+    results.append(response_text)
+    time.sleep(1)
+
+# Print extracted results
+for x in results:
+    print(x)
+
+# Add a new column to the DataFrame for extracted fruit names
+new_train_data = train_data.copy()
+new_train_data['Extracted_Fruit_Names'] = [[] for _ in range(len(new_train_data))]
+
+# Function to tie results back to the DataFrame
+def tie_results_to_tweets(results, df):
+    for i, result in enumerate(results):
+        df.at[i, 'Extracted_Fruit_Names'] = [result]
+
+tie_results_to_tweets(results, new_train_data)
+
+# Display DataFrame with all columns
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
+pd.set_option('display.max_colwidth', None)
+print(new_train_data.to_string(index=False))
+
+# Function to save DataFrame to CSV
+def save_dataframe_to_csv(dataframe, output_file):
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    dataframe.to_csv(output_file, index=False)
+    print(f"CSV file saved to: {output_file}")
+
+# Save the updated DataFrame to a new CSV file
+output_csv_file = '/Users/yunhuang/Desktop/new_train_data_zeroshot.csv'
+save_dataframe_to_csv(new_train_data, output_csv_file)
